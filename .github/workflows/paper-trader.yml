@@ -1,0 +1,33 @@
+name: Halal Trade Lab paper scan
+
+on:
+  schedule:
+    - cron: "2-59/5 * * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: halal-trade-lab-paper-scan
+  cancel-in-progress: false
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Run protected paper-trading scan
+        env:
+          SITE_URL: https://halal-trade-lab.mrgtr.chatgpt.site
+          SITES_BYPASS_TOKEN: ${{ secrets.SITES_BYPASS_TOKEN }}
+        run: |
+          test -n "$SITES_BYPASS_TOKEN"
+          curl --fail-with-body --silent --show-error --retry 2 --retry-delay 5 \
+            --request POST \
+            --header "Content-Type: application/json" \
+            --header "OAI-Sites-Authorization: Bearer $SITES_BYPASS_TOKEN" \
+            --data '{"action":"scan","symbol":"BTC/GBP"}' \
+            "$SITE_URL/api/engine" \
+            --output /tmp/scan-response.json
+          node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync("/tmp/scan-response.json","utf8")); if(r.error) throw new Error(r.error); console.log("Paper scan completed:", r.account?.last_scan ?? "state updated");'
