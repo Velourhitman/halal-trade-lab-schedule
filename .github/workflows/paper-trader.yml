@@ -30,7 +30,7 @@ jobs:
             --request POST \
             --header "Content-Type: application/json" \
             --header "OAI-Sites-Authorization: Bearer $SITES_BYPASS_TOKEN" \
-            --data '{"action":"scan","symbol":"BTC/GBP"}' \
+            --data '{"action":"scan","symbol":"BTC/GBP","source":"github-scheduler"}' \
             "$SITE_URL/api/engine" \
             --output /tmp/scan-response.json
           node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync("/tmp/scan-response.json","utf8")); if(r.error) throw new Error(r.error); console.log("Paper scan completed:", r.account?.last_scan ?? "state updated");'
