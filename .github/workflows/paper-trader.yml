@@ -5,7 +5,7 @@ on:
     paths:
       - ".github/workflows/paper-trader.yml"
   schedule:
-    - cron: "2-59/5 * * * *"
+    - cron: "17 * * * *"
   workflow_dispatch:
 
 permissions:
@@ -13,24 +13,44 @@ permissions:
 
 concurrency:
   group: halal-trade-lab-paper-scan
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
   scan:
     runs-on: ubuntu-latest
-    timeout-minutes: 3
+    timeout-minutes: 65
     steps:
-      - name: Run protected paper-trading scan
+      - name: Run protected five-minute paper-trading cycle
         env:
           SITE_URL: https://halal-trade-lab.mrgtr.chatgpt.site
           SITES_BYPASS_TOKEN: ${{ secrets.SITES_BYPASS_TOKEN }}
+        shell: bash
         run: |
+          set -u
           test -n "$SITES_BYPASS_TOKEN"
-          curl --fail-with-body --silent --show-error --retry 2 --retry-delay 5 \
-            --request POST \
-            --header "Content-Type: application/json" \
-            --header "OAI-Sites-Authorization: Bearer $SITES_BYPASS_TOKEN" \
-            --data '{"action":"scan","symbol":"BTC/GBP","source":"github-scheduler"}' \
-            "$SITE_URL/api/engine" \
-            --output /tmp/scan-response.json
-          node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync("/tmp/scan-response.json","utf8")); if(r.error) throw new Error(r.error); console.log("Paper scan completed:", r.account?.last_scan ?? "state updated");'
+          failures=0
+
+          for scan_number in $(seq 1 12); do
+            echo "Starting paper scan $scan_number of 12"
+
+            if curl --fail-with-body --silent --show-error --retry 2 --retry-delay 5 \
+              --request POST \
+              --header "Content-Type: application/json" \
+              --header "OAI-Sites-Authorization: Bearer $SITES_BYPASS_TOKEN" \
+              --data '{"action":"scan","symbol":"BTC/GBP","source":"github-scheduler"}' \
+              "$SITE_URL/api/engine" \
+              --output /tmp/scan-response.json \
+              && node -e 'const fs=require("fs"); const r=JSON.parse(fs.readFileSync("/tmp/scan-response.json","utf8")); if(r.error) throw new Error(r.error); console.log("Paper scan completed:", r.account?.last_scan ?? "state updated");'; then
+              echo "Scan $scan_number succeeded"
+            else
+              failures=$((failures + 1))
+              echo "::warning::Scan $scan_number failed; continuing the hourly cycle"
+            fi
+
+            if [ "$scan_number" -lt 12 ]; then
+              sleep 300
+            fi
+          done
+
+          echo "Hourly cycle completed with $failures failed scan(s)"
+          test "$failures" -lt 4
